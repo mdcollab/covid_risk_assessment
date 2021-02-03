@@ -6,6 +6,7 @@ import time
 
 from covid_simulation import CovidSimulation
 
+NITER = 25
 
 def quantify_infected(cumulative_infs, result, config):
     last_ind = len(cumulative_infs) - 1
@@ -14,7 +15,7 @@ def quantify_infected(cumulative_infs, result, config):
     return percent
 
 
-def plot_st_chart(data, var_name='Config Type', value_name=''):
+def plot_st_chart(data, var_name='Policy', value_name=''):
     data['Day'] = data.index
     data = data.melt('Day', var_name=var_name, value_name=value_name)
     plot_container.altair_chart(
@@ -59,7 +60,7 @@ def plot_cumulative_infections(results, config):
 
 
 def run_simulations(
-    config, niter=25, bar=None, n_configs=1, i_config=1, placeholder_iter=None,
+    config, niter=NITER, bar=None, n_configs=1, i_config=1, placeholder_iter=None,
 ):
     all_state_counts = []
     all_cumulative_infections = []
@@ -70,7 +71,7 @@ def run_simulations(
                 i * full_progress_fraction / niter
             )
         )
-        placeholder_iter.text(f'On iteration {i + 1}')
+        placeholder_iter.text(f'On iteration {i + 1} of {NITER}')
 
         state_counts, cumulative_infections, _, _ = (
             CovidSimulation(**config).run_simulation()
@@ -116,7 +117,7 @@ def run_simulation(config):
     i = 0
     for info, config in zip(config_types, configs):
         # Update the progress bar with each iteration.
-        placeholder_config.text(f'Testing configuration #{i + 1}')
+        placeholder_config.text(f'Simulating policy: {info}')
 
         n_configs = len(config_types)
         bar.progress(i / n_configs)
@@ -143,9 +144,15 @@ DEFAULT_CONFIG = {
     'external_infection_rate': 0.001,
 }
 
-st.write("# Transmission Risk Tool")
+st.write("# COVID Testing Policy Planning for Outbreak Reduction")
 
 st.sidebar.header("Data")
+
+######################################
+######################################
+# Side Bar ###########################
+######################################
+######################################
 
 ######################################
 # N Parameter ########################
@@ -250,10 +257,43 @@ if not N.isnumeric():
     st.sidebar.error("Error: this should be a numeric value.")
 
 ######################################
+######################################
 # Main Screen ########################
+######################################
 ######################################
 
 indent = '&nbsp;&nbsp;&nbsp;&nbsp;'
+
+######################################
+# Instructions #######################
+######################################
+
+st.write("")
+st.header("Instructions")
+st.write("")
+
+st.markdown(
+    "1. Input data values in the side bar titled 'Data'. This will set the "
+    "parameters values that are inputted into the simulation model."
+)
+st.markdown("2. Click 'Run Simulation' button below.")
+st.markdown(
+    "3. After simulation runs, results and plots will be plotted below."
+)
+
+######################################
+# Parameters #########################
+######################################
+
+st.markdown(
+    """
+    <style>
+    .small-font {
+        font-size:12px !important;
+    }
+    </style>
+    """, unsafe_allow_html=True
+)
 
 st.write("")
 st.header("Parameters")
@@ -266,16 +306,38 @@ st.write(
     "The likelihood of contracting COVID-19 in the office given an infected "
     "case (between 0-1)."
 )
+
+st.markdown(
+    """
+    <p class="small-font">
+        This will be affected by how socially-distanced employees are in the
+        workplace; if masks are required in the workplace; and if employees 
+        share common spaces/conference/same tools.
+    </p>
+    """, unsafe_allow_html=True
+)
+
 st.markdown(f"- {indent}beta={beta:.2f}")
 
 st.write(
     "The percentage of employees who are likely to stay home given onset of "
     "symptoms."
 )
+st.markdown(
+    """
+    <p class="small-font">
+        This will be affected by sick leave policy and by remote work ability.
+    </p>
+     """, unsafe_allow_html=True
+)
 st.markdown(f"- {indent}risk_behavior={risk_behavior:.2f}")
 
 st.write("The number of tests available per day.")
 st.markdown(f"- {indent}num_tests_daily={int(num_tests):.2f}")
+
+######################################
+# Simulation #########################
+######################################
 
 st.header("Simulation")
 
