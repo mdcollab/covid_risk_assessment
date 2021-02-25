@@ -6,7 +6,8 @@ class CovidSimulation():
 
     def __init__(
         self,
-        num_tests_daily=30,
+        testing_interval=4,
+        num_tests=None,
         testing_delay=3,
         infection_to_detectable_delay=0,
         beta=0.2, 
@@ -27,8 +28,11 @@ class CovidSimulation():
         
         Parameters
         ----------
-        num_tests_daily: 
-            The number of tests available per day.
+        testing_interval: 
+            The frequency at which to test all employees.
+        num_tests:
+            The number of tests available during testing days. If None, then 
+            this value to be equal to N.
         testing_delay:
             The number of days between test and results.
         infection_to_detectable_delay:
@@ -88,7 +92,13 @@ class CovidSimulation():
         self.state_logs = []
         self.state_counts = {}
         
-        self.num_tests_daily = num_tests_daily
+        self.testing_interval = testing_interval
+        
+        if num_tests is None:
+            self.num_tests = N
+        else:
+            self.num_tests = num_tests
+        
         self.testing_delay = testing_delay
         self.infection_to_detectable_delay = infection_to_detectable_delay
         self.beta = beta
@@ -148,9 +158,9 @@ class CovidSimulation():
     def get_testing_selection(self, date):
         """Get select number of people for testing.
         
-        Number of people will depend on `num_tests_daily`, and whether they pass 
-        the criteria necessary for selection, which include not having been 
-        tested recently (`last_tested_cutoff`).
+        Number of people will depend on `num_tests`, and whether they pass the 
+        criteria necessary for selection, which include not having been tested 
+        recently (`last_tested_cutoff`).
         """        
         if self.testing_process == 'sym_first':
             criteria_filter = self.population.is_symptomatic == True
@@ -210,7 +220,10 @@ class CovidSimulation():
     def run_tests(self, date):
         """Run tests on everyone assigned to test on that date.
         """
-        selection = self.get_testing_selection(date)
+        if self.num_tests < self.N:
+            selection = self.get_testing_selection(date)
+        else:
+            selection = self.population.index
         
         self.population.loc[selection, 'last_tested_date'] = date
         
@@ -419,8 +432,13 @@ class CovidSimulation():
             self.track_self_imposed_quarantine(date)
             self.release_quarantined_cases(date)
 
-            if self.num_tests_daily > 0:
-                self.run_tests(date)
+            if self.testing_interval is not None:
+                # if a testing day, run_tests:
+                print(date)
+                print(self.testing_interval)
+                if date % self.testing_interval == 0:
+                    self.run_tests(date)
+                
                 self.receive_test_results(date)
             
             self.recover_infected_cases()

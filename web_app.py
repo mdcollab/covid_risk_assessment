@@ -249,8 +249,8 @@ risk_behavior = sl_score + risk_score
 # Testing Cadence Parameter ##########
 ######################################
 
-num_tests = st.sidebar.text_input(
-    'How many employees do you want to test per day:', 1
+testing_interval = st.sidebar.text_input(
+    'At what interval (in days) do you want employees tested:', 1
 )
 
 if not N.isnumeric():
@@ -332,13 +332,14 @@ st.markdown(
 )
 st.markdown(f"- {indent}risk_behavior={risk_behavior:.2f}")
 
-st.write("The number of tests available per day.")
-st.markdown(f"- {indent}num_tests_daily={int(num_tests):.2f}")
+st.write("The cadence at which employees are tested.")
+st.markdown(f"- {indent}testing_interval={int(testing_interval):.2f}")
 
 ######################################
 # Simulation #########################
 ######################################
 
+st.write("")
 st.header("Simulation")
 
 config = {
@@ -347,7 +348,8 @@ config = {
         'N': int(N), 
         'R_initial': int(R), 
         'beta': beta, 
-        'num_tests_daily': int(num_tests),
+        'testing_interval' : int(testing_interval),
+        'num_tests': None,
         'risk_behavior': risk_behavior,
     }
 }
