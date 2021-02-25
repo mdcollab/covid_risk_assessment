@@ -135,18 +135,18 @@ class CovidSimulation():
         self.population.loc[initial_recovered, 'state'] = 'R'
         self.population.loc[initial_recovered, 'known_to_be_recovered'] = True
 
-    def log_states(self, date):
-        self.state_logs += [self.population['state'].rename(date)]
+    def log_states(self, day):
+        self.state_logs += [self.population['state'].rename(day)]
         
-        self.state_counts[date] = (
+        self.state_counts[day] = (
             self.population['state'].value_counts().to_dict()
         )
-        self.S = self.state_counts[date].get('S', 0)
-        self.I = self.state_counts[date].get('I', 0)
-        self.R = self.state_counts[date].get('R', 0)
-        self.Q = self.state_counts[date].get('Q', 0)
+        self.S = self.state_counts[day].get('S', 0)
+        self.I = self.state_counts[day].get('I', 0)
+        self.R = self.state_counts[day].get('R', 0)
+        self.Q = self.state_counts[day].get('Q', 0)
     
-    def log_updated_states(self, date):                
+    def log_updated_states(self, day):                
         self.cumulative_infections = (
             self.population['infection_date']
             .value_counts()
@@ -155,7 +155,7 @@ class CovidSimulation():
             .reindex(range(self.num_days), method='pad')
         )
     
-    def get_testing_selection(self, date):
+    def get_testing_selection(self, day):
         """Get select number of people for testing.
         
         Number of people will depend on `num_tests`, and whether they pass the 
@@ -217,22 +217,22 @@ class CovidSimulation():
             ))
         )
          
-    def run_tests(self, date):
+    def run_tests(self, day):
         """Run tests on everyone assigned to test on that date.
         """
         if self.num_tests < self.N:
-            selection = self.get_testing_selection(date)
+            selection = self.get_testing_selection(day)
         else:
             selection = self.population.index
         
-        self.population.loc[selection, 'last_tested_date'] = date
+        self.population.loc[selection, 'last_tested_date'] = day
         
         will_be_detected = (
             self.population['id'].apply(lambda i: i in selection) &
             (self.population['state'] == 'I') & 
             (np.random.rand(self.N) < self.sensitivity) &
             (
-                (date - self.population['infection_date']) 
+                (day - self.population['infection_date']) 
                 >= self.infection_to_detectable_delay
             )
         )
@@ -240,13 +240,13 @@ class CovidSimulation():
             will_be_detected, 'positive_test_dates'
         ] = self.population.loc[
             will_be_detected, 'positive_test_dates'
-        ].apply(lambda s: s.union({date}))
+        ].apply(lambda s: s.union({day}))
              
-    def receive_test_results(self, date):
+    def receive_test_results(self, day):
         """Receive earlier test results and place new positives in quarantine.
         """
         is_detected = self.population['positive_test_dates'].apply(
-            lambda test_dates: (date - self.testing_delay) in test_dates
+            lambda test_dates: (day - self.testing_delay) in test_dates
         )
         
         # If is already quarantining due to previous positive test, don't 
@@ -260,15 +260,15 @@ class CovidSimulation():
         self.population.loc[is_detected, 'state'] = 'Q'
         self.population.loc[
             is_detected & ~was_already_quarantining, 'quarantine_start_date'
-        ] = date
+        ] = day
         
-        self.end_self_imposed_quarantine_if_neg(date)
+        self.end_self_imposed_quarantine_if_neg(day)
     
-    def end_self_imposed_quarantine_if_neg(self, date):
+    def end_self_imposed_quarantine_if_neg(self, day):
         """End self-imposed quarantine if negative result.
         """
         is_not_detected = self.population['negative_test_dates'].apply(
-            lambda test_dates: (date - self.testing_delay) in test_dates
+            lambda test_dates: (day - self.testing_delay) in test_dates
         )
 
         is_neg_and_quarantining = (
@@ -288,11 +288,11 @@ class CovidSimulation():
         self.population.loc[is_true_neg_and_quarantining, 'state'] = 'S'
         self.population.loc[is_false_neg_and_quarantining, 'state'] = 'I'
 
-    def release_quarantined_cases(self, date):
+    def release_quarantined_cases(self, day):
         """Release anyone who has finished quarantine.
         """
         have_quarantined_full_duration = (
-            (date - self.population['quarantine_start_date']) == self.Q_duration
+            (day - self.population['quarantine_start_date']) == self.Q_duration
         )
         
         # Assume symptoms vanish after quarantine period
@@ -322,7 +322,7 @@ class CovidSimulation():
             ), 'state'
         ] = 'R'
     
-    def introduce_symptoms(self, date):
+    def introduce_symptoms(self):
         """Certain percentage of people will develop symptoms.
         
         Percentage of those with symptoms (whether due to COVID-19 or 
@@ -341,7 +341,7 @@ class CovidSimulation():
             (np.random.rand(self.N) < self.sym_neg_rate), 'is_symptomatic'
         ] = True
         
-    def track_self_imposed_quarantine(self, date): 
+    def track_self_imposed_quarantine(self, day): 
         """Track cases who choose to self-isolate with onset of symptoms.
 
         These include a percentage (dependent on the `risk_behavior` parameter) 
@@ -361,9 +361,9 @@ class CovidSimulation():
         self.population.loc[will_self_quarantine, 'state'] = 'Q'
         self.population.loc[
             will_self_quarantine, 'quarantine_start_date'
-        ] = date
+        ] = day
           
-    def infect_susceptible_cases(self, date):
+    def infect_susceptible_cases(self, day):
         """Susceptible --> Infected transition.
         
         Easiest to think of beta as the number of contact a potential recipient 
@@ -389,7 +389,7 @@ class CovidSimulation():
             is_susceptible = self.population['state'] == 'S'
             is_infected = is_susceptible & has_contact
             self.population.loc[is_infected, 'state'] = 'I'
-            self.population.loc[is_infected, 'infection_date'] = date
+            self.population.loc[is_infected, 'infection_date'] = day
     
     def track_known_recovered_cases(self):
         """Track cases that have knowingly recovered.
@@ -424,26 +424,24 @@ class CovidSimulation():
         self.introduce_initial_infections()
         self.introduce_initial_recovered()
 
-        for date in range(self.num_days):
-            self.log_states(date)
+        for day in range(self.num_days):
+            self.log_states(day)
             
-            self.introduce_symptoms(date)
+            self.introduce_symptoms()
             self.track_known_recovered_cases()
-            self.track_self_imposed_quarantine(date)
-            self.release_quarantined_cases(date)
+            self.track_self_imposed_quarantine(day)
+            self.release_quarantined_cases(day)
 
             if self.testing_interval is not None:
                 # if a testing day, run_tests:
-                print(date)
-                print(self.testing_interval)
-                if date % self.testing_interval == 0:
-                    self.run_tests(date)
+                if day % self.testing_interval == 0:
+                    self.run_tests(day)
                 
-                self.receive_test_results(date)
+                self.receive_test_results(day)
             
             self.recover_infected_cases()
-            self.infect_susceptible_cases(date)
-            self.log_updated_states(date)
+            self.infect_susceptible_cases(day)
+            self.log_updated_states(day)
         
         return (
             pd.DataFrame(self.state_counts).T.fillna(0), 
