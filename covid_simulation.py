@@ -8,7 +8,6 @@ class CovidSimulation():
         self,
         testing_interval=4,
         num_tests=None,
-        testing_delay=3,
         infection_to_detectable_delay=0,
         beta=0.2, 
         gamma=0.07, 
@@ -17,7 +16,12 @@ class CovidSimulation():
         I_initial=5,
         N=200,
         num_days=130,
-        sensitivity=0.8,
+        sensitivity_antigen_sym=0.85,
+        sensitivity_antigen_asy=0.4,
+        sensitivity_pcr=0.98,
+        delay_antigen=0,
+        delay_pcr=5,
+        test_type_process='all_pcr',
         external_infection_rate=0.001,
         risk_behavior=0.7,
         testing_process='sym_first',
@@ -33,8 +37,6 @@ class CovidSimulation():
         num_tests:
             The number of tests available during testing days. If None, then 
             this value to be equal to N.
-        testing_delay:
-            The number of days between test and results.
         infection_to_detectable_delay:
             The number of days between infection and when it would be detectable 
             in a test.
@@ -53,9 +55,23 @@ class CovidSimulation():
             Number of people within company population.
         num_days:
             Number of days to simulate.
-        sensitivity:
-            The sensitivity (aka recall) of the test (true positives / 
-            num_infected).
+        sensitivity_antigen_sym:
+            The sensitivity (aka recall) of the antigen test (true positives / 
+            num_infected) for symptomatic cases.
+        sensitivity_antigen_asy:
+            The sensitivity (aka recall) of the antigen test (true positives / 
+            num_infected) for asymptomatic cases.
+        sensitivity_pcr:
+            The sensitivity (aka recall) of the PCR test (true positives / 
+            num_infected) for all cases.
+        delay_antigen:
+            The number of days between the antigen test and results.
+        delay_pcr:
+            The number of days between the PCR test and results.
+        test_type_process:
+            The test type to administer. Options include: `all_pcr`, 
+            `all_antigen`, `50_50` (randomly select half and half), 
+            `sym_dependent` (antigen for those with symptoms, PCR otherwise).
         external_infection_rate: 
             The probability on any given day that someone comes in 
             infection-causing contact with an infected person outside the 
@@ -99,7 +115,6 @@ class CovidSimulation():
         else:
             self.num_tests = num_tests
         
-        self.testing_delay = testing_delay
         self.infection_to_detectable_delay = infection_to_detectable_delay
         self.beta = beta
         self.gamma = gamma
@@ -108,7 +123,12 @@ class CovidSimulation():
         self.I_initial = I_initial
         self.N = N
         self.num_days = num_days
-        self.sensitivity = sensitivity
+        self.sensitivity_antigen_sym = sensitivity_antigen_sym
+        self.sensitivity_antigen_asy = sensitivity_antigen_asy
+        self.sensitivity_pcr = sensitivity_pcr
+        self.delay_antigen = delay_antigen
+        self.delay_pcr = delay_pcr
+        self.test_type_process = test_type_process
         self.external_infection_rate = external_infection_rate
         self.risk_behavior = risk_behavior
         self.testing_process= testing_process
@@ -216,7 +236,31 @@ class CovidSimulation():
                 randomly_select_from.index, num_tests_left, replace=False
             ))
         )
-         
+    
+    def get_test_type_selections(self, selection):
+        if self.test_type_process == 'all_antigen':
+            selection_antigen = selection
+            selection_pcr = np.empty(0)
+        elif self.test_type_process == 'all_pcr':
+            selection_antigen = np.empty(0)
+            selection_pcr = selection
+        elif self.test_type_process == '50_50':
+            selection_antigen = np.random.choice(
+                selection, int(N / 2), replace=False
+            )
+            selection_pcr = [x for x in selection if x not in antigen_selection]
+        elif self.test_type_process == 'symptom_dependent':
+            selection_antigen = (
+                self.population[self.population.is_symptomatic].index
+            )
+            selection_pcr = (
+                self.population[~self.population.is_symptomatic].index
+            )
+
+        assert self.N == (len(selection_antigen) + len(selection_pcr))
+
+        return selection_antigen, selection_pcr
+
     def run_tests(self, day):
         """Run tests on everyone assigned to test on that date.
         """
@@ -226,11 +270,32 @@ class CovidSimulation():
             selection = self.population.index
         
         self.population.loc[selection, 'last_tested_date'] = day
+
+        selection_antigen, selection_pcr = (
+            self.get_test_type_selections(selection)
+        )
+        is_antigen_test = (
+            self.population['id'].apply(lambda i: i in selection_antigen)
+        )
+        is_pcr_test = self.population['id'].apply(lambda i: i in selection_pcr)
         
+        passes_sensitivity = (
+            (np.random.rand(self.N) < self.sensitivity_antigen_sym) &
+            self.population.is_symptomatic &
+            is_antigen_test
+            
+        ) | (
+            (np.random.rand(self.N) < self.sensitivity_antigen_asy) &
+            ~self.population.is_symptomatic & 
+            is_antigen_test
+        ) | (
+             (np.random.rand(self.N) < self.sensitivity_pcr) &
+            is_pcr_test
+        )
         will_be_detected = (
             self.population['id'].apply(lambda i: i in selection) &
-            (self.population['state'] == 'I') & 
-            (np.random.rand(self.N) < self.sensitivity) &
+            (self.population['state'] == 'I') &
+            passes_sensitivity & 
             (
                 (day - self.population['infection_date']) 
                 >= self.infection_to_detectable_delay
@@ -241,12 +306,20 @@ class CovidSimulation():
         ] = self.population.loc[
             will_be_detected, 'positive_test_dates'
         ].apply(lambda s: s.union({day}))
+
+        return is_antigen_test, is_pcr_test
              
-    def receive_test_results(self, day):
+    def receive_test_results(self, day, is_antigen_test, is_pcr_test):
         """Receive earlier test results and place new positives in quarantine.
         """
-        is_detected = self.population['positive_test_dates'].apply(
-            lambda test_dates: (day - self.testing_delay) in test_dates
+        is_detected = (
+            self.population['positive_test_dates'].apply(
+                lambda test_dates: (day - self.delay_antigen) in test_dates
+            ) & is_antigen_test
+        ) | (
+            self.population['positive_test_dates'].apply(
+                lambda test_dates: (day - self.delay_pcr) in test_dates
+            ) & is_pcr_test
         )
         
         # If is already quarantining due to previous positive test, don't 
@@ -262,13 +335,19 @@ class CovidSimulation():
             is_detected & ~was_already_quarantining, 'quarantine_start_date'
         ] = day
         
-        self.end_self_imposed_quarantine_if_neg(day)
+        self.end_self_quarantine_if_neg(day, is_antigen_test, is_pcr_test)
     
-    def end_self_imposed_quarantine_if_neg(self, day):
+    def end_self_quarantine_if_neg(self, day, is_antigen_test, is_pcr_test):
         """End self-imposed quarantine if negative result.
         """
-        is_not_detected = self.population['negative_test_dates'].apply(
-            lambda test_dates: (day - self.testing_delay) in test_dates
+        is_not_detected = (
+            self.population['negative_test_dates'].apply(
+                lambda test_dates: (day - self.delay_antigen) in test_dates
+            ) & is_antigen_test
+        ) | (
+            self.population['negative_test_dates'].apply(
+                lambda test_dates: (day - self.delay_pcr) in test_dates
+            ) & is_pcr_test
         )
 
         is_neg_and_quarantining = (
@@ -435,9 +514,9 @@ class CovidSimulation():
             if self.testing_interval is not None:
                 # if a testing day, run_tests:
                 if day % self.testing_interval == 0:
-                    self.run_tests(day)
+                    is_antigen_test, is_pcr_test = self.run_tests(day)
                 
-                self.receive_test_results(day)
+                self.receive_test_results(day, is_antigen_test, is_pcr_test)
             
             self.recover_infected_cases()
             self.infect_susceptible_cases(day)
