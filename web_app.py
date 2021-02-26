@@ -89,24 +89,17 @@ def run_simulations(
 
 def run_simulation(config):
     config_types = [
-        'Antigen - Symptomatic first',
-        'Antigen - Asymptomatic first',
-        'PCR - Symptomatic first',
-        'PCR - Asymptomatic first',
+        'PCR only',
+        'Antigen only',
+        '50-50',
+        'Symptom dependent',
     ]
     configs = [config.copy() for _ in range(len(config_types))]    
-
-    antigen_config = {**config, **{'sensitivity': 0.75, 'testing_delay': 0}}
-    pcr_config = {**config, **{'sensitivity': 0.98, 'testing_delay': 5}}
  
-    configs[0] = antigen_config
-    configs[0]['testing_process'] = 'sym_first'
-    configs[1] = antigen_config
-    configs[1]['testing_process'] = 'asy_first'
-    configs[2] = pcr_config
-    configs[2]['testing_process'] = 'sym_first'
-    configs[3] = pcr_config
-    configs[3]['testing_process'] = 'asy_first'
+    configs[0]['test_type_process'] = 'all_pcr'
+    configs[1]['test_type_process'] = 'all_antigen'
+    configs[2]['test_type_process'] = '50_50'
+    configs[3]['test_type_process'] = 'sym_dependent'
 
     # Add a placeholder
     placeholder_config = st.empty()
@@ -168,9 +161,13 @@ if not N.isnumeric():
 ######################################
 
 sd_info = st.sidebar.selectbox(
-    "How socially distanced are employees in the office?",
-    ('Not 6 feet apart', 'Sometimes 6 feet apart', 'Everyone 6 feet apart'),
+    "Does the workplace allow for 6 feet of distance?", ('Yes', 'No'),
 )
+
+sd_hours = st.sidebar.slider(
+    "Around how many hours a day are employees less than 6 feet apart?", 0, 12
+)
+
 mask_info = st.sidebar.selectbox(
     "Are masks required?",
     (
@@ -180,21 +177,25 @@ mask_info = st.sidebar.selectbox(
     ),
 )
 share_info = st.sidebar.selectbox(
-    "Do employees share common spaces/conference rooms/same tools??",
+    "Do employees share common spaces/conference rooms/same tools?",
     ('Yes', 'No'),
 )
 
-if sd_info == 'Not 6 feet apart':
+share_hours = st.sidebar.slider(
+    "Around how many hours a day are employees in the same shared space?", 0, 12
+)
+
+if sd_info == 'No':
     sd_beta = 0.4
-elif sd_info == 'Sometimes 6 feet apart':
+elif sd_info == 'Yes':
     sd_beta = 0.3
-elif sd_info == 'Everyone 6 feet apart':
-    sd_beta = 0.2
+
+MASK_DECREASE = 0.21
 
 if mask_info == 'Required':
-    mask_beta = -0.1
-elif mask_info == 'Not allowed (i.e. it interferes with the job requirements)':
-    mask_beta = 0.1
+    mask_beta = MASK_DECREASE
+elif mask_info == 'Advised, but not required':
+    mask_beta = MASK_DECREASE / 2
 else:
     mask_beta = 0
 
@@ -203,7 +204,8 @@ if share_info == 'Yes':
 else:
     share_beta = 0
 
-beta = sd_beta + mask_beta + share_beta
+MAX_BETA = 0.8
+beta = (MAX_BETA * sd_hours + share_beta) * mask_beta 
 
 ######################################
 # R Parameter ########################
@@ -349,7 +351,6 @@ config = {
         'R_initial': int(R), 
         'beta': beta, 
         'testing_interval' : int(testing_interval),
-        'num_tests': None,
         'risk_behavior': risk_behavior,
     }
 }
