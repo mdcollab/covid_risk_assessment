@@ -20,7 +20,7 @@ class CovidSimulation():
         sensitivity_antigen_asy=0.4,
         sensitivity_pcr=0.98,
         delay_antigen=0,
-        delay_pcr=5,
+        delay_pcr=3,
         test_type_process='all_pcr',
         external_infection_rate=0.001,
         risk_behavior=0.7,
