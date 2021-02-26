@@ -257,7 +257,7 @@ class CovidSimulation():
                 self.population[~self.population.is_symptomatic].index
             ) if x in selection]
 
-        assert self.N == (len(selection_antigen) + len(selection_pcr))
+        assert len(selection) == (len(selection_antigen) + len(selection_pcr))
 
         return selection_antigen, selection_pcr
 
