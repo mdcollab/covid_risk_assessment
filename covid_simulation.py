@@ -103,8 +103,10 @@ class CovidSimulation():
         )
         
         self.population['id'] = self.population.index
-        self.population['known_to_be_recovered'] = False
         
+        test_type_options = {'all_pcr', 'all_antigen', '50_50', 'sym_dependent'}
+        assert test_type_process in test_type_options
+
         self.state_logs = []
         self.state_counts = {}
         
