@@ -160,12 +160,22 @@ if not N.isnumeric():
 # Beta Parameter #####################
 ######################################
 
+DEFAULT_BETA = 0.9
+
+MAX_HOURS = 9
+
+MASK_DECREASE = 0.21
+DISTANCE_DECREASE = 0.4
+SHARE_INCREASE = 0.2
+
 sd_info = st.sidebar.selectbox(
     "Does the workplace allow for 6 feet of distance?", ('Yes', 'No'),
 )
 
-sd_hours = st.sidebar.slider(
-    "Around how many hours a day are employees less than 6 feet apart?", 0, 12
+non_sd_hours = st.sidebar.slider(
+    "Around how many hours a day are employees less than 6 feet apart?", 
+    0, 
+    MAX_HOURS,
 )
 
 mask_info = st.sidebar.selectbox(
@@ -177,35 +187,31 @@ mask_info = st.sidebar.selectbox(
     ),
 )
 share_info = st.sidebar.selectbox(
-    "Do employees share common spaces/conference rooms/same tools?",
-    ('Yes', 'No'),
+    "Do employees share same common tools?", ('Yes', 'No'),
 )
 
-share_hours = st.sidebar.slider(
-    "Around how many hours a day are employees in the same shared space?", 0, 12
-)
-
+# `sd_beta` ranges from 0.4 (max beta decrease) to 1 (no beta decrease).
 if sd_info == 'No':
-    sd_beta = 0.4
+    sd_beta = 1
 elif sd_info == 'Yes':
-    sd_beta = 0.3
-
-MASK_DECREASE = 0.21
+    sd_beta = DISTANCE_DECREASE + (
+        (non_sd_hours / MAX_HOURS) * (1 - DISTANCE_DECREASE)
+    )
 
 if mask_info == 'Required':
     mask_beta = MASK_DECREASE
 elif mask_info == 'Advised, but not required':
-    mask_beta = MASK_DECREASE / 2
+    mask_beta = MASK_DECREASE * 2
 else:
-    mask_beta = 0
+    mask_beta = 1
 
-if share_info == 'Yes':
-    share_beta = 0.1
-else:
+if share_info == 'No':
     share_beta = 0
+else:
+    share_beta = SHARE_INCREASE
 
-MAX_BETA = 0.8
-beta = (MAX_BETA * sd_hours + share_beta) * mask_beta 
+beta = (DEFAULT_BETA * sd_beta * mask_beta)
+beta = beta + ((1 - beta) * share_beta)
 
 ######################################
 # R Parameter ########################
