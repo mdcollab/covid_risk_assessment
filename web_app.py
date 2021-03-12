@@ -87,19 +87,7 @@ def run_simulations(
     }
 
 
-def run_simulation(config):
-    config_types = [
-        'PCR only',
-        'Antigen only',
-        '50-50',
-        'Symptom dependent',
-    ]
-    configs = [config.copy() for _ in range(len(config_types))]    
- 
-    configs[0]['test_type_process'] = 'all_pcr'
-    configs[1]['test_type_process'] = 'all_antigen'
-    configs[2]['test_type_process'] = '50_50'
-    configs[3]['test_type_process'] = 'sym_dependent'
+def run_simulation(configs, config_types):
 
     # Add a placeholder
     placeholder_config = st.empty()
@@ -139,13 +127,13 @@ DEFAULT_CONFIG = {
 
 st.write("# COVID Testing Policy Planning for Outbreak Reduction")
 
-st.sidebar.header("Data")
-
 ######################################
 ######################################
 # Side Bar ###########################
 ######################################
 ######################################
+
+st.sidebar.header("Data")
 
 ######################################
 # N Parameter ########################
@@ -265,6 +253,26 @@ if not N.isnumeric():
     st.sidebar.error("Error: this should be a numeric value.")
 
 ######################################
+# Policy Options #####################
+######################################
+
+st.sidebar.header("Options")
+
+policy_options = [
+    'PCR only', 
+    'Antigen only', 
+    'Both PCR and Antigen', 
+    'Symptom-dependent PCR and Antigen'
+]
+
+processes = ['all_pcr', 'all_antigen', '50_50', 'sym_dependent']
+policy_mappings = {o: process for o, process in zip(policy_options, processes)}
+
+policies_to_test = st.sidebar.multiselect(
+    "Which testing options are you potentially interested in?", policy_options
+)
+
+######################################
 ######################################
 # Main Screen ########################
 ######################################
@@ -361,11 +369,16 @@ config = {
     }
 }
 
+configs = [config.copy() for _ in range(len(policies_to_test))]
+
+for i, policy in enumerate(policies_to_test): 
+    configs[i]['test_type_process'] = policy_mappings[policy]
+
 plot_container = st.beta_container()
 
 if st.button('Run Simulation'):
     start_time = time.time()
-    results = run_simulation(config)
+    results = run_simulation(configs, policies_to_test)
     plot_cumulative_infections(results, config)
     
     end_time = time.time()
