@@ -70,7 +70,7 @@ class CovidSimulation():
             The number of days between the PCR test and results.
         test_type_process:
             The test type to administer. Options include: `all_pcr`, 
-            `all_antigen`, `50_50` (randomly select half and half), 
+            `all_antigen`, `both` (randomly select half and half), 
             `sym_dependent` (antigen for those with symptoms, PCR otherwise).
         external_infection_rate: 
             The probability on any given day that someone comes in 
@@ -104,7 +104,7 @@ class CovidSimulation():
         
         self.population['id'] = self.population.index
         
-        test_type_options = {'all_pcr', 'all_antigen', '50_50', 'sym_dependent'}
+        test_type_options = {'all_pcr', 'all_antigen', 'both', 'sym_dependent'}
         assert test_type_process in test_type_options
 
         self.state_logs = []
@@ -246,7 +246,7 @@ class CovidSimulation():
         elif self.test_type_process == 'all_pcr':
             selection_antigen = np.empty(0)
             selection_pcr = selection
-        elif self.test_type_process == '50_50':
+        elif self.test_type_process == 'both':
             selection_antigen = np.random.choice(
                 selection, int(self.N / 2), replace=False
             )
