@@ -246,22 +246,22 @@ class CovidSimulation():
     
     def get_test_type_selections(self, selection):
         if self.test_type_process == 'all_antigen':
-            selection_antigen = selection
             selection_pcr = np.empty(0)
+            selection_antigen = selection
         elif self.test_type_process == 'all_pcr':
-            selection_antigen = np.empty(0)
             selection_pcr = selection
+            selection_antigen = np.empty(0)
         elif self.test_type_process == 'both':
             selection_pcr = np.random.choice(
                 selection, int(self.N * self.test_type_ratio), replace=False
             )
             selection_antigen = [x for x in selection if x not in selection_pcr]
         elif self.test_type_process == 'sym_dependent':
-            selection_antigen = [x for x in (
-                self.population[self.population.is_symptomatic].index
-            ) if x in selection]
             selection_pcr = [x for x in (
                 self.population[~self.population.is_symptomatic].index
+            ) if x in selection]
+            selection_antigen = [x for x in (
+                self.population[self.population.is_symptomatic].index
             ) if x in selection]
 
         assert len(selection) == (len(selection_antigen) + len(selection_pcr))

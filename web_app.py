@@ -269,7 +269,7 @@ processes = ['all_pcr', 'all_antigen', 'both', 'sym_dependent']
 policy_mappings = {o: process for o, process in zip(policy_options, processes)}
 
 policies_to_test = st.sidebar.multiselect(
-    "Which testing options are you potentially interested in?", policy_options
+    "Which testing options are you interested in comparing?", policy_options
 )
 
 if 'Both PCR and Antigen' in policies_to_test:
