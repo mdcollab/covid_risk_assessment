@@ -22,6 +22,7 @@ class CovidSimulation():
         delay_antigen=0,
         delay_pcr=3,
         test_type_process='all_pcr',
+        test_type_ratio=0.5,
         external_infection_rate=0.001,
         risk_behavior=0.7,
         testing_process='sym_first',
@@ -72,6 +73,9 @@ class CovidSimulation():
             The test type to administer. Options include: `all_pcr`, 
             `all_antigen`, `both` (randomly select half and half), 
             `sym_dependent` (antigen for those with symptoms, PCR otherwise).
+        test_type_ratio : float
+            The ratio of PCR to antigen test types (used only if 
+            `test_type_process` parameter is set to `both`).
         external_infection_rate: 
             The probability on any given day that someone comes in 
             infection-causing contact with an infected person outside the 
@@ -131,6 +135,7 @@ class CovidSimulation():
         self.delay_antigen = delay_antigen
         self.delay_pcr = delay_pcr
         self.test_type_process = test_type_process
+        self.test_type_ratio = test_type_ratio
         self.external_infection_rate = external_infection_rate
         self.risk_behavior = risk_behavior
         self.testing_process= testing_process
@@ -247,10 +252,10 @@ class CovidSimulation():
             selection_antigen = np.empty(0)
             selection_pcr = selection
         elif self.test_type_process == 'both':
-            selection_antigen = np.random.choice(
-                selection, int(self.N / 2), replace=False
+            selection_pcr = np.random.choice(
+                selection, int(self.N * self.test_type_ratio), replace=False
             )
-            selection_pcr = [x for x in selection if x not in selection_antigen]
+            selection_antigen = [x for x in selection if x not in selection_pcr]
         elif self.test_type_process == 'sym_dependent':
             selection_antigen = [x for x in (
                 self.population[self.population.is_symptomatic].index

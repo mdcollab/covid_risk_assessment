@@ -272,6 +272,11 @@ policies_to_test = st.sidebar.multiselect(
     "Which testing options are you potentially interested in?", policy_options
 )
 
+if 'Both PCR and Antigen' in policies_to_test:
+    test_type_ratio = st.sidebar.slider(
+        "Please choose a PCR to antigen testing ratio:", 0.0, 1.0,
+    )
+
 ######################################
 ######################################
 # Main Screen ########################
@@ -373,6 +378,9 @@ configs = [config.copy() for _ in range(len(policies_to_test))]
 
 for i, policy in enumerate(policies_to_test): 
     configs[i]['test_type_process'] = policy_mappings[policy]
+
+    if policy == 'Both PCR and Antigen':
+        configs[i]['test_type_ratio'] = test_type_ratio
 
 plot_container = st.beta_container()
 
