@@ -226,11 +226,11 @@ rw_policy = st.sidebar.selectbox(
 )
 
 if sl_policy == 'Paid sick leave':
-    sl_score = 0.6 
+    sl_score = 0.7 
 elif sl_policy == 'Unpaid sick leave':
-    sl_score = 0.2
+    sl_score = 0.5
 elif sl_policy == 'Limited sick leave allowed':
-    sl_score = 0.1
+    sl_score = 0.3
 
 if rw_policy == 'Yes':
     risk_score = 0.2 
