@@ -523,7 +523,7 @@ class CovidSimulation():
                 if day % self.testing_interval == 0:
                     is_antigen_test, is_pcr_test = self.run_tests(day)
                 
-            self.receive_test_results(day, is_antigen_test, is_pcr_test)
+                self.receive_test_results(day, is_antigen_test, is_pcr_test)
             
             self.recover_infected_cases()
             self.infect_susceptible_cases(day)
