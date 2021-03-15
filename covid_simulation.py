@@ -33,61 +33,61 @@ class CovidSimulation():
         
         Parameters
         ----------
-        testing_interval: 
+        testing_interval : int 
             The frequency at which to test all employees.
-        num_tests:
+        num_tests : int
             The number of tests available during testing days. If None, then 
             this value to be equal to N.
-        infection_to_detectable_delay:
+        infection_to_detectable_delay : int
             The number of days between infection and when it would be detectable 
             in a test.
-        beta:
+        beta : float
             The number of contacts per person that would result in an infection 
             (if one was S and the other I).
-        gamma:
+        gamma : float
             Recovery rate.
-        Q_duration:
+        Q_duration : int
             Quarantine duration.
-        R_initial:
+        R_initial : int
             Number of employees already recovered (or vaccinated) on day 1.
-        I_initial:
+        I_initial : int
             Number of employees already infected on day 1.
-        N:
+        N : int
             Number of people within company population.
-        num_days:
+        num_days : int
             Number of days to simulate.
-        sensitivity_antigen_sym:
+        sensitivity_antigen_sym : float
             The sensitivity (aka recall) of the antigen test (true positives / 
             num_infected) for symptomatic cases.
-        sensitivity_antigen_asy:
+        sensitivity_antigen_asy : float
             The sensitivity (aka recall) of the antigen test (true positives / 
             num_infected) for asymptomatic cases.
-        sensitivity_pcr:
+        sensitivity_pcr : float
             The sensitivity (aka recall) of the PCR test (true positives / 
             num_infected) for all cases.
-        delay_antigen:
+        delay_antigen : int
             The number of days between the antigen test and results.
-        delay_pcr:
+        delay_pcr : int
             The number of days between the PCR test and results.
-        test_type_process:
+        test_type_process : str
             The test type to administer. Options include: `all_pcr`, 
             `all_antigen`, `both` (randomly select half and half), 
             `sym_dependent` (antigen for those with symptoms, PCR otherwise).
         test_type_ratio : float
             The ratio of PCR to antigen test types (used only if 
             `test_type_process` parameter is set to `both`).
-        external_infection_rate: 
+        external_infection_rate : float 
             The probability on any given day that someone comes in 
             infection-causing contact with an infected person outside the 
             population.
-        risk_behavior:
+        risk_behavior : float
             The probability an individual would choose to self-quarantine if 
             they display symptoms.
-        testing_process:
+        testing_process : str
             Either `sym_first`, `asy_first`, or `random`.
-        sym_pos_rate:
+        sym_pos_rate : float
             Symptomatic rate given a COVID-19 positive case.
-        sym_neg_rate:
+        sym_neg_rate : float
             Symptomatic rate (of COVID-19-like symptoms) given a negative case 
             (i.e. rate of flu or respiratory illnesses among cases without 
             COVID-19).
