@@ -108,7 +108,9 @@ class CovidSimulation():
         
         self.population['id'] = self.population.index
         
-        test_type_options = {'all_pcr', 'all_antigen', 'both', 'sym_dependent'}
+        test_type_options = {
+            'all_pcr', 'all_antigen', 'both', 'sym_dependent', None
+        }
         assert test_type_process in test_type_options
 
         self.state_logs = []
