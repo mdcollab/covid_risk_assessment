@@ -47,7 +47,7 @@ def plot_cumulative_infections(results, config):
     # Plotting `Number Quarantining` plot
     plot_container.subheader('Number of Employees Quarantining Per Day')
     to_plot_q = pd.DataFrame(
-        {k: v['state_counts']['Q'] for k, v in results.items()}
+        {k: v['state_counts'].get('Q', []) for k, v in results.items()}
     )
     plot_st_chart(to_plot_q, value_name='Quarantining Count')
 
@@ -372,7 +372,6 @@ config = {
         'N': int(N), 
         'R_initial': int(R), 
         'beta': beta, 
-        # 'testing_interval' : int(testing_interval),
         'risk_behavior': risk_behavior,
     }
 }
