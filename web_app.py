@@ -226,11 +226,11 @@ rw_policy = st.sidebar.selectbox(
 )
 
 if sl_policy == 'Paid sick leave':
-    sl_score = 0.7 
+    sl_score = 0.5 
 elif sl_policy == 'Unpaid sick leave':
-    sl_score = 0.5
-elif sl_policy == 'Limited sick leave allowed':
     sl_score = 0.3
+elif sl_policy == 'Limited sick leave allowed':
+    sl_score = 0.1
 
 if rw_policy == 'Yes':
     risk_score = 0.2 
@@ -242,27 +242,24 @@ else:
 risk_behavior = sl_score + risk_score
 
 ######################################
-# Testing Cadence Parameter ##########
-######################################
-
-testing_interval = st.sidebar.text_input(
-    'At what interval (in days) do you want employees tested:', 1
-)
-
-if not N.isnumeric():
-    st.sidebar.error("Error: this should be a numeric value.")
-
-######################################
 # Policy Options #####################
 ######################################
 
 st.sidebar.header("Options")
 
+testing_intervals = st.sidebar.text_input(
+    'At what interval (in days) do you want employees tested: '
+    '(*if comparing multiple testing cadences, please separate by commas)', 1
+)
+
+testing_intervals_list = testing_intervals.split(',')
+
+BOTH_OPTION = 'PCR and Antigen'
 policy_options = [
     'PCR only', 
     'Antigen only', 
-    'Both PCR and Antigen', 
-    'Symptom-dependent PCR and Antigen'
+    BOTH_OPTION,
+    'Symptom dependent'
 ]
 
 processes = ['all_pcr', 'all_antigen', 'both', 'sym_dependent']
@@ -272,7 +269,7 @@ policies_to_test = st.sidebar.multiselect(
     "Which testing options are you interested in comparing?", policy_options
 )
 
-if 'Both PCR and Antigen' in policies_to_test:
+if BOTH_OPTION in policies_to_test:
     test_type_ratio = st.sidebar.slider(
         "Please choose a PCR to antigen testing ratio:", 0.0, 1.0,
     )
@@ -297,9 +294,15 @@ st.markdown(
     "1. Input data values in the side bar titled 'Data'. This will set the "
     "parameters values that are inputted into the simulation model."
 )
-st.markdown("2. Click 'Run Simulation' button below.")
 st.markdown(
-    "3. After simulation runs, results and plots will be plotted below."
+    "2. Select testing interval and test type options in the 'Options' section " 
+    "of the side bar."
+)
+st.markdown(
+    "3. Click 'Run Simulation' button below."
+)
+st.markdown(
+    "4. After simulation runs, results and plots will be plotted below."
 )
 
 ######################################
@@ -333,7 +336,7 @@ st.markdown(
     <p class="small-font">
         This will be affected by how socially-distanced employees are in the
         workplace; if masks are required in the workplace; and if employees 
-        share common spaces/conference/same tools.
+        share same tools.
     </p>
     """, unsafe_allow_html=True
 )
@@ -354,7 +357,7 @@ st.markdown(
 st.markdown(f"- {indent}risk_behavior={risk_behavior:.2f}")
 
 st.write("The cadence at which employees are tested.")
-st.markdown(f"- {indent}testing_interval={int(testing_interval):.2f}")
+st.markdown(f"- {indent}testing_interval={testing_intervals}")
 
 ######################################
 # Simulation #########################
@@ -369,27 +372,40 @@ config = {
         'N': int(N), 
         'R_initial': int(R), 
         'beta': beta, 
-        'testing_interval' : int(testing_interval),
+        # 'testing_interval' : int(testing_interval),
         'risk_behavior': risk_behavior,
     }
 }
 
-configs = [config.copy() for _ in range(len(policies_to_test))]
+configs_len = len(policies_to_test) * len(testing_intervals_list)
+configs = [config.copy() for _ in range(configs_len)]
 
-for i, policy in enumerate(policies_to_test): 
-    configs[i]['test_type_process'] = policy_mappings[policy]
+policies_list = []
+i = 0 
+for policy in policies_to_test:
+    for testing_interval in testing_intervals_list:
+        configs[i]['test_type_process'] = policy_mappings[policy]
+        configs[i]['testing_interval'] = int(testing_interval)
 
-    if policy == 'Both PCR and Antigen':
-        configs[i]['test_type_ratio'] = test_type_ratio
+        if policy == BOTH_OPTION:
+            configs[i]['test_type_ratio'] = test_type_ratio
+
+        policies_list += [f'{policy} - every {testing_interval} days']
+        i += 1
 
 plot_container = st.beta_container()
 
 if st.button('Run Simulation'):
     start_time = time.time()
-    results = run_simulation(configs, policies_to_test)
-    plot_cumulative_infections(results, config)
-    
-    end_time = time.time()
 
-    seconds = end_time - start_time
-    st.text(f'Simulations took {seconds / 60:.2f} minutes to run.')
+    if policies_to_test:
+        assert len(configs) == len(policies_list)
+        results = run_simulation(configs, policies_list)
+        plot_cumulative_infections(results, config)
+    
+        end_time = time.time()
+
+        seconds = end_time - start_time
+        st.text(f'Simulations took {seconds / 60:.2f} minutes to run.')
+    else:
+        st.write('Please select policies you would like to test.')
