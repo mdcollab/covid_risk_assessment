@@ -113,6 +113,7 @@ class CovidSimulation():
         }
         assert test_type_process in test_type_options
 
+        self.test_counts = {}
         self.state_logs = []
         self.state_counts = {}
         
@@ -267,6 +268,13 @@ class CovidSimulation():
             ) if x in selection]
 
         assert len(selection) == (len(selection_antigen) + len(selection_pcr))
+
+        test_types = ['pcr', 'antigen']
+        selections = [selection_pcr, selection_antigen]
+        for test_type, test_selection in zip(test_types, selections):
+            self.test_counts[test_type] = (
+                self.test_counts.get(test_type, 0) + len(test_selection)
+            )
 
         return selection_antigen, selection_pcr
 
@@ -536,4 +544,5 @@ class CovidSimulation():
             self.cumulative_infections, 
             self.population, 
             pd.concat(self.state_logs, axis=1),
+            self.test_counts,
         )

@@ -36,6 +36,14 @@ def plot_cumulative_infections(results, config):
         if percent_infected < best_result:
             best_result = percent_infected
             best_config_type = config_type
+        
+        test_counts = results[config_type]['test_counts']
+        pcr_count = test_counts.get('pcr', 0)
+        antigen_count = test_counts.get('antigen', 0)
+        plot_container.text(
+            f'Test counts for {config_type}: {pcr_count} PCR and '
+            f'{antigen_count} antigen.'
+        )
 
     # Plotting `Cumulative Infections` plot
     plot_container.subheader('Number of Cumulative Infections')
@@ -66,7 +74,7 @@ def run_simulations(
         )
         placeholder_iter.text(f'On iteration {i + 1} of {NITER}')
 
-        state_counts, cumulative_infections, _, _ = (
+        state_counts, cumulative_infections, _, _, test_counts = (
             CovidSimulation(**config).run_simulation()
         )
         all_state_counts.append(state_counts)
@@ -77,6 +85,7 @@ def run_simulations(
         'cumulative_infections': (
             pd.concat(all_cumulative_infections).groupby(level=0).mean()
         ),
+        'test_counts': test_counts,
     }
 
 
