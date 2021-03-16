@@ -27,7 +27,7 @@ class CovidSimulation():
         risk_behavior=0.7,
         testing_process='sym_first',
         sym_pos_rate=0.65,
-        sym_neg_rate=0.05,
+        sym_neg_rate=0.02,
     ):
         """Initialize `self.population` with every state as `S` (Susceptible).
         
