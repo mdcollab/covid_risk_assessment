@@ -261,10 +261,18 @@ policy_options = [
     'PCR only', 
     'Antigen only', 
     BOTH_OPTION,
-    'Symptom dependent'
+    'Symptom dependent',
+    'Symptom dependent V2',
 ]
 
-processes = ['all_pcr', 'all_antigen', 'both', 'sym_dependent']
+processes = [
+    'all_pcr', 
+    'all_antigen', 
+    'both', 
+    'sym_dependent', 
+    'sym_dependent_reversed', 
+    None
+]
 policy_mappings = {o: process for o, process in zip(policy_options, processes)}
 
 policies_to_test = st.sidebar.multiselect(

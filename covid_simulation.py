@@ -71,8 +71,8 @@ class CovidSimulation():
             The number of days between the PCR test and results.
         test_type_process : str
             The test type to administer. Options include: `all_pcr`, 
-            `all_antigen`, `both` (randomly select half and half), 
-            `sym_dependent` (antigen for those with symptoms, PCR otherwise).
+            `all_antigen`, `both`, `sym_dependent` (antigen for those with 
+            symptoms, PCR otherwise), `sym_dependent_reversed` (vice versa).
         test_type_ratio : float
             The ratio of PCR to antigen test types (used only if 
             `test_type_process` parameter is set to `both`).
@@ -109,7 +109,8 @@ class CovidSimulation():
         self.population['id'] = self.population.index
         
         test_type_options = {
-            'all_pcr', 'all_antigen', 'both', 'sym_dependent', None
+            'all_pcr', 'all_antigen', 'both', 'sym_dependent', 
+            'sym_dependent_reversed', None
         }
         assert test_type_process in test_type_options
 
@@ -265,6 +266,13 @@ class CovidSimulation():
             ) if x in selection]
             selection_antigen = [x for x in (
                 self.population[self.population.is_symptomatic].index
+            ) if x in selection]
+        elif self.test_type_process == 'sym_dependent_reversed':
+            selection_pcr = [x for x in (
+                self.population[self.population.is_symptomatic].index
+            ) if x in selection]
+            selection_antigen = [x for x in (
+                self.population[~self.population.is_symptomatic].index
             ) if x in selection]
 
         assert len(selection) == (len(selection_antigen) + len(selection_pcr))
