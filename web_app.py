@@ -257,12 +257,14 @@ testing_intervals = st.sidebar.text_input(
 testing_intervals_list = testing_intervals.split(',')
 
 BOTH_OPTION = 'PCR and Antigen'
+NO_TEST_OPTION = 'No testing'
 policy_options = [
     'PCR only', 
     'Antigen only', 
     BOTH_OPTION,
     'Symptom dependent',
     'Symptom dependent V2',
+    NO_TEST_OPTION,
 ]
 
 processes = [
@@ -386,21 +388,32 @@ config = {
     }
 }
 
-configs_len = len(policies_to_test) * len(testing_intervals_list)
+no_test_option_len = int(NO_TEST_OPTION in policies_to_test) 
+configs_len = (
+    (len(policies_to_test) - no_test_option_len) * len(testing_intervals_list) 
+    + no_test_option_len
+)
 configs = [config.copy() for _ in range(configs_len)]
 
 policies_list = []
 i = 0 
 for policy in policies_to_test:
-    for testing_interval in testing_intervals_list:
-        configs[i]['test_type_process'] = policy_mappings[policy]
-        configs[i]['testing_interval'] = int(testing_interval)
+    if policy == NO_TEST_OPTION:
+        configs[i]['testing_interval'] = None
 
-        if policy == BOTH_OPTION:
-            configs[i]['test_type_ratio'] = test_type_ratio
-
-        policies_list += [f'{policy} - every {testing_interval} days']
+        policies_list += [NO_TEST_OPTION]
         i += 1
+
+    else:
+        for testing_interval in testing_intervals_list:
+            configs[i]['test_type_process'] = policy_mappings[policy]
+            configs[i]['testing_interval'] = int(testing_interval)
+
+            if policy == BOTH_OPTION:
+                configs[i]['test_type_ratio'] = test_type_ratio
+
+            policies_list += [f'{policy} - every {testing_interval} days']
+            i += 1
 
 plot_container = st.beta_container()
 
