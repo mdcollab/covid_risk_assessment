@@ -95,6 +95,7 @@ class CovidSimulation():
         self.population = pd.DataFrame(
             {
                 'state': 'S',
+                'state_Q': None,
                 'positive_test_dates': [set() for _ in range(N)],
                 'negative_test_dates': [set() for _ in range(N)],
                 'quarantine_start_date': np.nan,
@@ -115,6 +116,7 @@ class CovidSimulation():
         assert test_type_process in test_type_options
 
         self.test_counts = {}
+        self.state_Q_logs = []
         self.state_logs = []
         self.state_counts = {}
         
@@ -168,6 +170,10 @@ class CovidSimulation():
 
     def log_states(self, day):
         self.state_logs += [self.population['state'].rename(day)]
+        
+        is_not_Q = self.population.state != 'Q'
+        self.population.loc[is_not_Q, 'state_Q'] = None
+        self.state_Q_logs += [self.population['state_Q'].rename(day)]
         
         self.state_counts[day] = (
             self.population['state'].value_counts().to_dict()
@@ -552,5 +558,6 @@ class CovidSimulation():
             self.cumulative_infections, 
             self.population, 
             pd.concat(self.state_logs, axis=1),
+            pd.concat(self.state_Q_logs, axis=1),
             self.test_counts,
         )
