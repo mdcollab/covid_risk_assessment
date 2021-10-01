@@ -22,68 +22,72 @@ class CovidSimulation():
         delay_antigen=0,
         delay_pcr=3,
         test_type_process='all_pcr',
+        test_type_ratio=0.5,
         external_infection_rate=0.001,
         risk_behavior=0.7,
         testing_process='sym_first',
         sym_pos_rate=0.65,
-        sym_neg_rate=0.05,
+        sym_neg_rate=0.02,
     ):
         """Initialize `self.population` with every state as `S` (Susceptible).
         
         Parameters
         ----------
-        testing_interval: 
+        testing_interval : int 
             The frequency at which to test all employees.
-        num_tests:
+        num_tests : int
             The number of tests available during testing days. If None, then 
             this value to be equal to N.
-        infection_to_detectable_delay:
+        infection_to_detectable_delay : int
             The number of days between infection and when it would be detectable 
             in a test.
-        beta:
+        beta : float
             The number of contacts per person that would result in an infection 
             (if one was S and the other I).
-        gamma:
+        gamma : float
             Recovery rate.
-        Q_duration:
+        Q_duration : int
             Quarantine duration.
-        R_initial:
+        R_initial : int
             Number of employees already recovered (or vaccinated) on day 1.
-        I_initial:
+        I_initial : int
             Number of employees already infected on day 1.
-        N:
+        N : int
             Number of people within company population.
-        num_days:
+        num_days : int
             Number of days to simulate.
-        sensitivity_antigen_sym:
+        sensitivity_antigen_sym : float
             The sensitivity (aka recall) of the antigen test (true positives / 
             num_infected) for symptomatic cases.
-        sensitivity_antigen_asy:
+        sensitivity_antigen_asy : float
             The sensitivity (aka recall) of the antigen test (true positives / 
             num_infected) for asymptomatic cases.
-        sensitivity_pcr:
+        sensitivity_pcr : float
             The sensitivity (aka recall) of the PCR test (true positives / 
             num_infected) for all cases.
-        delay_antigen:
+        delay_antigen : int
             The number of days between the antigen test and results.
-        delay_pcr:
+        delay_pcr : int
             The number of days between the PCR test and results.
-        test_type_process:
+        test_type_process : str
             The test type to administer. Options include: `all_pcr`, 
-            `all_antigen`, `50_50` (randomly select half and half), 
-            `sym_dependent` (antigen for those with symptoms, PCR otherwise).
-        external_infection_rate: 
+            `all_antigen`, `both`, `sym_dependent` (antigen for those with 
+            symptoms, PCR otherwise), `sym_dependent_reversed` (vice versa).
+        test_type_ratio : float
+            The ratio of PCR to antigen test types (used only if 
+            `test_type_process` parameter is set to `both`).
+        external_infection_rate : float 
             The probability on any given day that someone comes in 
             infection-causing contact with an infected person outside the 
             population.
-        risk_behavior:
+        risk_behavior : float
             The probability an individual would choose to self-quarantine if 
             they display symptoms.
-        testing_process:
+        testing_process : str
             Either `sym_first`, `asy_first`, or `random`.
-        sym_pos_rate:
+        sym_pos_rate : float
             Symptomatic rate given a COVID-19 positive case.
-        sym_neg_rate:
+        sym_neg_rate : float
             Symptomatic rate (of COVID-19-like symptoms) given a negative case 
             (i.e. rate of flu or respiratory illnesses among cases without 
             COVID-19).
@@ -91,6 +95,7 @@ class CovidSimulation():
         self.population = pd.DataFrame(
             {
                 'state': 'S',
+                'state_Q': None,
                 'positive_test_dates': [set() for _ in range(N)],
                 'negative_test_dates': [set() for _ in range(N)],
                 'quarantine_start_date': np.nan,
@@ -103,8 +108,15 @@ class CovidSimulation():
         )
         
         self.population['id'] = self.population.index
-        self.population['known_to_be_recovered'] = False
         
+        test_type_options = {
+            'all_pcr', 'all_antigen', 'both', 'sym_dependent', 
+            'sym_dependent_reversed', None
+        }
+        assert test_type_process in test_type_options
+
+        self.test_counts = {}
+        self.state_Q_logs = []
         self.state_logs = []
         self.state_counts = {}
         
@@ -129,6 +141,7 @@ class CovidSimulation():
         self.delay_antigen = delay_antigen
         self.delay_pcr = delay_pcr
         self.test_type_process = test_type_process
+        self.test_type_ratio = test_type_ratio
         self.external_infection_rate = external_infection_rate
         self.risk_behavior = risk_behavior
         self.testing_process= testing_process
@@ -157,6 +170,10 @@ class CovidSimulation():
 
     def log_states(self, day):
         self.state_logs += [self.population['state'].rename(day)]
+        
+        is_not_Q = self.population.state != 'Q'
+        self.population.loc[is_not_Q, 'state_Q'] = None
+        self.state_Q_logs += [self.population['state_Q'].rename(day)]
         
         self.state_counts[day] = (
             self.population['state'].value_counts().to_dict()
@@ -239,25 +256,39 @@ class CovidSimulation():
     
     def get_test_type_selections(self, selection):
         if self.test_type_process == 'all_antigen':
-            selection_antigen = selection
             selection_pcr = np.empty(0)
+            selection_antigen = selection
         elif self.test_type_process == 'all_pcr':
-            selection_antigen = np.empty(0)
             selection_pcr = selection
-        elif self.test_type_process == '50_50':
-            selection_antigen = np.random.choice(
-                selection, int(self.N / 2), replace=False
+            selection_antigen = np.empty(0)
+        elif self.test_type_process == 'both':
+            selection_pcr = np.random.choice(
+                selection, int(self.N * self.test_type_ratio), replace=False
             )
-            selection_pcr = [x for x in selection if x not in selection_antigen]
+            selection_antigen = [x for x in selection if x not in selection_pcr]
         elif self.test_type_process == 'sym_dependent':
+            selection_pcr = [x for x in (
+                self.population[~self.population.is_symptomatic].index
+            ) if x in selection]
             selection_antigen = [x for x in (
                 self.population[self.population.is_symptomatic].index
             ) if x in selection]
+        elif self.test_type_process == 'sym_dependent_reversed':
             selection_pcr = [x for x in (
+                self.population[self.population.is_symptomatic].index
+            ) if x in selection]
+            selection_antigen = [x for x in (
                 self.population[~self.population.is_symptomatic].index
             ) if x in selection]
 
         assert len(selection) == (len(selection_antigen) + len(selection_pcr))
+
+        test_types = ['pcr', 'antigen']
+        selections = [selection_pcr, selection_antigen]
+        for test_type, test_selection in zip(test_types, selections):
+            self.test_counts[test_type] = (
+                self.test_counts.get(test_type, 0) + len(test_selection)
+            )
 
         return selection_antigen, selection_pcr
 
@@ -326,14 +357,12 @@ class CovidSimulation():
         # restart `quarantine_start_date` counter
         was_already_quarantining = (
             (self.population.state == 'Q') &
-            (self.population.positive_test_dates.apply(
-                lambda dates: len(dates) > 0)
-            )
+            (self.population.positive_test_dates.apply(lambda x: len(x) > 0))
         )
-        self.population.loc[is_detected, 'state'] = 'Q'
-        self.population.loc[
-            is_detected & ~was_already_quarantining, 'quarantine_start_date'
-        ] = day
+        should_quarantine = is_detected & ~was_already_quarantining
+        self.population.loc[should_quarantine, 'state'] = 'Q'
+        self.population.loc[is_detected, 'state_Q'] = 'I'
+        self.population.loc[should_quarantine , 'quarantine_start_date'] = day
         
         self.end_self_quarantine_if_neg(day, is_antigen_test, is_pcr_test)
     
@@ -408,6 +437,10 @@ class CovidSimulation():
         otherwise), will choose to remain at home. Update `self.population`to 
         reflect this.
         """
+        # Start with a clean slate: 
+        # if someone was symptomatic yesterday, doesn't mean they will be today.
+        self.population.is_symptomatic = False
+
         # Percentage of infected show symptoms
         self.population.loc[
             (self.population['state'] == 'I') & 
@@ -429,19 +462,21 @@ class CovidSimulation():
             -- Are symptomatic.
             -- Have not already knowingly recovered from COVID-19.
         """
-        will_self_quarantine = (
+        will_quarantine = (
             (self.population.state != 'Q') &
             (self.population.is_symptomatic) &
             (np.random.rand(self.N) < self.risk_behavior) &  
             ~self.population.known_to_be_recovered
         )
         
+        for state in 'SIR':
+            is_state =  self.population.state == state
+            self.population.loc[will_quarantine & is_state, 'state_Q'] = state
+
         # Those showing symptoms who choose to self-quarantine
-        self.population.loc[will_self_quarantine, 'state'] = 'Q'
-        self.population.loc[
-            will_self_quarantine, 'quarantine_start_date'
-        ] = day
-          
+        self.population.loc[will_quarantine, 'state'] = 'Q'
+        self.population.loc[will_quarantine, 'quarantine_start_date'] = day
+
     def infect_susceptible_cases(self, day):
         """Susceptible --> Infected transition.
         
@@ -527,4 +562,6 @@ class CovidSimulation():
             self.cumulative_infections, 
             self.population, 
             pd.concat(self.state_logs, axis=1),
+            pd.concat(self.state_Q_logs, axis=1),
+            self.test_counts,
         )

@@ -4,9 +4,18 @@ import pandas as pd
 import streamlit as st
 import time
 
+import matplotlib.pyplot as plt
+from matplotlib.colors import ListedColormap
+
+from covid_animation import animate
 from covid_simulation import CovidSimulation
 
 NITER = 25
+
+
+######################################
+# Calculation Funcs ##################
+######################################
 
 def quantify_infected(cumulative_infs, result, config):
     last_ind = len(cumulative_infs) - 1
@@ -36,6 +45,14 @@ def plot_cumulative_infections(results, config):
         if percent_infected < best_result:
             best_result = percent_infected
             best_config_type = config_type
+        
+        test_counts = results[config_type]['test_counts']
+        pcr_count = test_counts.get('pcr', 0)
+        antigen_count = test_counts.get('antigen', 0)
+        plot_container.text(
+            f'Test counts for {config_type}: {pcr_count} PCR and '
+            f'{antigen_count} antigen.'
+        )
 
     # Plotting `Cumulative Infections` plot
     plot_container.subheader('Number of Cumulative Infections')
@@ -43,13 +60,6 @@ def plot_cumulative_infections(results, config):
         {k: v['cumulative_infections'] for k, v in results.items()}
     )
     plot_st_chart(to_plot, value_name='Cumulative Infections Count')
-       
-    # Plotting `Number Quarantining` plot
-    plot_container.subheader('Number of Employees Quarantining Per Day')
-    to_plot_q = pd.DataFrame(
-        {k: v['state_counts']['Q'] for k, v in results.items()}
-    )
-    plot_st_chart(to_plot_q, value_name='Quarantining Count')
 
     # Printing results info
     plot_container.subheader('Results')
@@ -59,8 +69,29 @@ def plot_cumulative_infections(results, config):
     plot_container.write('')
 
 
+def plot_animation(state_logs, the_plot):
+    for day in state_logs.columns:
+        fig, ax = plt.subplots()
+        ax.set_ylim(0, 3)
+        ax.set_xticks([])
+        ax.set_yticks([1, 2])
+        ax.set_yticklabels(['Home', 'Work'])
+        
+        animate(state_logs[day], ax)
+        time.sleep(0.1)
+    
+        the_plot.pyplot(plt)
+        plt.close()
+
+
 def run_simulations(
-    config, niter=NITER, bar=None, n_configs=1, i_config=1, placeholder_iter=None,
+    config, 
+    niter=NITER, 
+    bar=None, 
+    n_configs=1, 
+    i_config=1, 
+    placeholder_iter=None, 
+    the_plot=None,
 ):
     all_state_counts = []
     all_cumulative_infections = []
@@ -73,38 +104,39 @@ def run_simulations(
         )
         placeholder_iter.text(f'On iteration {i + 1} of {NITER}')
 
-        state_counts, cumulative_infections, _, _ = (
+        state_cnts, cumulative_infs, _, state_logs, state_Q_logs, test_cnts = (
             CovidSimulation(**config).run_simulation()
         )
-        all_state_counts.append(state_counts)
-        all_cumulative_infections.append(cumulative_infections)
+        all_state_counts.append(state_cnts)
+        all_cumulative_infections.append(cumulative_infs)
+
+        logs = state_logs.copy()
+        for day in logs.columns:
+            is_Q = logs[day] == 'Q'
+
+            for state in 'SIR':
+                is_state = state_Q_logs[day] == state
+                logs.loc[is_Q & is_state, day] = 'Q' + state
+        
+        plot_animation(logs, the_plot)
     
     return {
         'state_counts': pd.concat(all_state_counts).groupby(level=0).mean(),
         'cumulative_infections': (
             pd.concat(all_cumulative_infections).groupby(level=0).mean()
         ),
+        'test_counts': test_cnts,
     }
 
 
-def run_simulation(config):
-    config_types = [
-        'PCR only',
-        'Antigen only',
-        '50-50',
-        'Symptom dependent',
-    ]
-    configs = [config.copy() for _ in range(len(config_types))]    
- 
-    configs[0]['test_type_process'] = 'all_pcr'
-    configs[1]['test_type_process'] = 'all_antigen'
-    configs[2]['test_type_process'] = '50_50'
-    configs[3]['test_type_process'] = 'sym_dependent'
+def run_simulation(configs, config_types):
 
     # Add a placeholder
     placeholder_config = st.empty()
     placeholder_iter = st.empty()
     bar = st.progress(0)
+
+    the_plot = st.pyplot(plt)
 
     results = {}
     i = 0
@@ -120,6 +152,7 @@ def run_simulation(config):
             n_configs=n_configs,
             i_config=i,
             placeholder_iter=placeholder_iter,
+            the_plot=the_plot,
         )
 
         i += 1
@@ -139,13 +172,13 @@ DEFAULT_CONFIG = {
 
 st.write("# COVID Testing Policy Planning for Outbreak Reduction")
 
-st.sidebar.header("Data")
-
 ######################################
 ######################################
 # Side Bar ###########################
 ######################################
 ######################################
+
+st.sidebar.header("Data")
 
 ######################################
 # N Parameter ########################
@@ -160,12 +193,22 @@ if not N.isnumeric():
 # Beta Parameter #####################
 ######################################
 
+DEFAULT_BETA = 0.9
+
+MAX_HOURS = 9
+
+MASK_DECREASE = 0.21
+DISTANCE_DECREASE = 0.4
+SHARE_INCREASE = 0.2
+
 sd_info = st.sidebar.selectbox(
     "Does the workplace allow for 6 feet of distance?", ('Yes', 'No'),
 )
 
-sd_hours = st.sidebar.slider(
-    "Around how many hours a day are employees less than 6 feet apart?", 0, 12
+non_sd_hours = st.sidebar.slider(
+    "Around how many hours a day are employees less than 6 feet apart?", 
+    0, 
+    MAX_HOURS,
 )
 
 mask_info = st.sidebar.selectbox(
@@ -177,35 +220,31 @@ mask_info = st.sidebar.selectbox(
     ),
 )
 share_info = st.sidebar.selectbox(
-    "Do employees share common spaces/conference rooms/same tools?",
-    ('Yes', 'No'),
+    "Do employees share same common tools?", ('Yes', 'No'),
 )
 
-share_hours = st.sidebar.slider(
-    "Around how many hours a day are employees in the same shared space?", 0, 12
-)
-
+# `sd_beta` ranges from 0.4 (max beta decrease) to 1 (no beta decrease).
 if sd_info == 'No':
-    sd_beta = 0.4
+    sd_beta = 1
 elif sd_info == 'Yes':
-    sd_beta = 0.3
-
-MASK_DECREASE = 0.21
+    sd_beta = DISTANCE_DECREASE + (
+        (non_sd_hours / MAX_HOURS) * (1 - DISTANCE_DECREASE)
+    )
 
 if mask_info == 'Required':
     mask_beta = MASK_DECREASE
 elif mask_info == 'Advised, but not required':
-    mask_beta = MASK_DECREASE / 2
+    mask_beta = MASK_DECREASE * 2
 else:
-    mask_beta = 0
+    mask_beta = 1
 
-if share_info == 'Yes':
-    share_beta = 0.1
-else:
+if share_info == 'No':
     share_beta = 0
+else:
+    share_beta = SHARE_INCREASE
 
-MAX_BETA = 0.8
-beta = (MAX_BETA * sd_hours + share_beta) * mask_beta 
+beta = (DEFAULT_BETA * sd_beta * mask_beta)
+beta = beta + ((1 - beta) * share_beta)
 
 ######################################
 # R Parameter ########################
@@ -232,9 +271,9 @@ rw_policy = st.sidebar.selectbox(
 )
 
 if sl_policy == 'Paid sick leave':
-    sl_score = 0.6 
+    sl_score = 0.5 
 elif sl_policy == 'Unpaid sick leave':
-    sl_score = 0.2
+    sl_score = 0.3
 elif sl_policy == 'Limited sick leave allowed':
     sl_score = 0.1
 
@@ -248,15 +287,47 @@ else:
 risk_behavior = sl_score + risk_score
 
 ######################################
-# Testing Cadence Parameter ##########
+# Policy Options #####################
 ######################################
 
-testing_interval = st.sidebar.text_input(
-    'At what interval (in days) do you want employees tested:', 1
+st.sidebar.header("Options")
+
+testing_intervals = st.sidebar.text_input(
+    'At what interval (in days) do you want employees tested: '
+    '(*if comparing multiple testing cadences, please separate by commas)', 1
 )
 
-if not N.isnumeric():
-    st.sidebar.error("Error: this should be a numeric value.")
+testing_intervals_list = testing_intervals.split(',')
+
+BOTH_OPTION = 'PCR and Antigen'
+NO_TEST_OPTION = 'No testing'
+policy_options = [
+    'PCR only', 
+    'Antigen only', 
+    BOTH_OPTION,
+    'Symptom dependent',
+    'Symptom dependent V2',
+    NO_TEST_OPTION,
+]
+
+processes = [
+    'all_pcr', 
+    'all_antigen', 
+    'both', 
+    'sym_dependent', 
+    'sym_dependent_reversed', 
+    None
+]
+policy_mappings = {o: process for o, process in zip(policy_options, processes)}
+
+policies_to_test = st.sidebar.multiselect(
+    "Which testing options are you interested in comparing?", policy_options
+)
+
+if BOTH_OPTION in policies_to_test:
+    test_type_ratio = st.sidebar.slider(
+        "Please choose a PCR to antigen testing ratio:", 0.0, 1.0,
+    )
 
 ######################################
 ######################################
@@ -278,9 +349,15 @@ st.markdown(
     "1. Input data values in the side bar titled 'Data'. This will set the "
     "parameters values that are inputted into the simulation model."
 )
-st.markdown("2. Click 'Run Simulation' button below.")
 st.markdown(
-    "3. After simulation runs, results and plots will be plotted below."
+    "2. Select testing interval and test type options in the 'Options' section " 
+    "of the side bar."
+)
+st.markdown(
+    "3. Click 'Run Simulation' button below."
+)
+st.markdown(
+    "4. After simulation runs, results and plots will be plotted below."
 )
 
 ######################################
@@ -314,7 +391,7 @@ st.markdown(
     <p class="small-font">
         This will be affected by how socially-distanced employees are in the
         workplace; if masks are required in the workplace; and if employees 
-        share common spaces/conference/same tools.
+        share same tools.
     </p>
     """, unsafe_allow_html=True
 )
@@ -335,7 +412,7 @@ st.markdown(
 st.markdown(f"- {indent}risk_behavior={risk_behavior:.2f}")
 
 st.write("The cadence at which employees are tested.")
-st.markdown(f"- {indent}testing_interval={int(testing_interval):.2f}")
+st.markdown(f"- {indent}testing_interval={testing_intervals}")
 
 ######################################
 # Simulation #########################
@@ -350,19 +427,50 @@ config = {
         'N': int(N), 
         'R_initial': int(R), 
         'beta': beta, 
-        'testing_interval' : int(testing_interval),
         'risk_behavior': risk_behavior,
     }
 }
+
+no_test_option_len = int(NO_TEST_OPTION in policies_to_test) 
+configs_len = (
+    (len(policies_to_test) - no_test_option_len) * len(testing_intervals_list) 
+    + no_test_option_len
+)
+configs = [config.copy() for _ in range(configs_len)]
+
+policies_list = []
+i = 0 
+for policy in policies_to_test:
+    if policy == NO_TEST_OPTION:
+        configs[i]['testing_interval'] = None
+
+        policies_list += [NO_TEST_OPTION]
+        i += 1
+
+    else:
+        for testing_interval in testing_intervals_list:
+            configs[i]['test_type_process'] = policy_mappings[policy]
+            configs[i]['testing_interval'] = int(testing_interval)
+
+            if policy == BOTH_OPTION:
+                configs[i]['test_type_ratio'] = test_type_ratio
+
+            policies_list += [f'{policy} - every {testing_interval} days']
+            i += 1
 
 plot_container = st.beta_container()
 
 if st.button('Run Simulation'):
     start_time = time.time()
-    results = run_simulation(config)
-    plot_cumulative_infections(results, config)
-    
-    end_time = time.time()
 
-    seconds = end_time - start_time
-    st.text(f'Simulations took {seconds / 60:.2f} minutes to run.')
+    if policies_to_test:
+        assert len(configs) == len(policies_list)
+        results = run_simulation(configs, policies_list)
+        plot_cumulative_infections(results, config)
+    
+        end_time = time.time()
+
+        seconds = end_time - start_time
+        st.text(f'Simulations took {seconds / 60:.2f} minutes to run.')
+    else:
+        st.write('Please select policies you would like to test.')
