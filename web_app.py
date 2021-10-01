@@ -4,9 +4,18 @@ import pandas as pd
 import streamlit as st
 import time
 
+import matplotlib.pyplot as plt
+from matplotlib.colors import ListedColormap
+
+from covid_animation import animate
 from covid_simulation import CovidSimulation
 
 NITER = 25
+
+
+######################################
+# Calculation Funcs ##################
+######################################
 
 def quantify_infected(cumulative_infs, result, config):
     last_ind = len(cumulative_infs) - 1
@@ -60,8 +69,29 @@ def plot_cumulative_infections(results, config):
     plot_container.write('')
 
 
+def plot_animation(state_logs, the_plot):
+    for day in state_logs.columns:
+        fig, ax = plt.subplots()
+        ax.set_ylim(0, 3)
+        ax.set_xticks([])
+        ax.set_yticks([1, 2])
+        ax.set_yticklabels(['Home', 'Work'])
+        
+        animate(state_logs[day], ax)
+        time.sleep(0.1)
+    
+        the_plot.pyplot(plt)
+        plt.close()
+
+
 def run_simulations(
-    config, niter=NITER, bar=None, n_configs=1, i_config=1, placeholder_iter=None,
+    config, 
+    niter=NITER, 
+    bar=None, 
+    n_configs=1, 
+    i_config=1, 
+    placeholder_iter=None, 
+    the_plot=None,
 ):
     all_state_counts = []
     all_cumulative_infections = []
@@ -74,18 +104,28 @@ def run_simulations(
         )
         placeholder_iter.text(f'On iteration {i + 1} of {NITER}')
 
-        state_counts, cumulative_infections, _, _, test_counts = (
+        state_cnts, cumulative_infs, _, state_logs, state_Q_logs, test_cnts = (
             CovidSimulation(**config).run_simulation()
         )
-        all_state_counts.append(state_counts)
-        all_cumulative_infections.append(cumulative_infections)
+        all_state_counts.append(state_cnts)
+        all_cumulative_infections.append(cumulative_infs)
+
+        logs = state_logs.copy()
+        for day in logs.columns:
+            is_Q = logs[day] == 'Q'
+
+            for state in 'SIR':
+                is_state = state_Q_logs[day] == state
+                logs.loc[is_Q & is_state, day] = 'Q' + state
+        
+        plot_animation(logs, the_plot)
     
     return {
         'state_counts': pd.concat(all_state_counts).groupby(level=0).mean(),
         'cumulative_infections': (
             pd.concat(all_cumulative_infections).groupby(level=0).mean()
         ),
-        'test_counts': test_counts,
+        'test_counts': test_cnts,
     }
 
 
@@ -95,6 +135,8 @@ def run_simulation(configs, config_types):
     placeholder_config = st.empty()
     placeholder_iter = st.empty()
     bar = st.progress(0)
+
+    the_plot = st.pyplot(plt)
 
     results = {}
     i = 0
@@ -110,6 +152,7 @@ def run_simulation(configs, config_types):
             n_configs=n_configs,
             i_config=i,
             placeholder_iter=placeholder_iter,
+            the_plot=the_plot,
         )
 
         i += 1
