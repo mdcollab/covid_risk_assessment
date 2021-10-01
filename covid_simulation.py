@@ -357,14 +357,12 @@ class CovidSimulation():
         # restart `quarantine_start_date` counter
         was_already_quarantining = (
             (self.population.state == 'Q') &
-            (self.population.positive_test_dates.apply(
-                lambda dates: len(dates) > 0)
-            )
+            (self.population.positive_test_dates.apply(lambda x: len(x) > 0))
         )
-        self.population.loc[is_detected, 'state'] = 'Q'
-        self.population.loc[
-            is_detected & ~was_already_quarantining, 'quarantine_start_date'
-        ] = day
+        should_quarantine = is_detected & ~was_already_quarantining
+        self.population.loc[should_quarantine, 'state'] = 'Q'
+        self.population.loc[is_detected, 'state_Q'] = 'I'
+        self.population.loc[should_quarantine , 'quarantine_start_date'] = day
         
         self.end_self_quarantine_if_neg(day, is_antigen_test, is_pcr_test)
     
@@ -439,6 +437,10 @@ class CovidSimulation():
         otherwise), will choose to remain at home. Update `self.population`to 
         reflect this.
         """
+        # Start with a clean slate: 
+        # if someone was symptomatic yesterday, doesn't mean they will be today.
+        self.population.is_symptomatic = False
+
         # Percentage of infected show symptoms
         self.population.loc[
             (self.population['state'] == 'I') & 
@@ -460,19 +462,21 @@ class CovidSimulation():
             -- Are symptomatic.
             -- Have not already knowingly recovered from COVID-19.
         """
-        will_self_quarantine = (
+        will_quarantine = (
             (self.population.state != 'Q') &
             (self.population.is_symptomatic) &
             (np.random.rand(self.N) < self.risk_behavior) &  
             ~self.population.known_to_be_recovered
         )
         
+        for state in 'SIR':
+            is_state =  self.population.state == state
+            self.population.loc[will_quarantine & is_state, 'state_Q'] = state
+
         # Those showing symptoms who choose to self-quarantine
-        self.population.loc[will_self_quarantine, 'state'] = 'Q'
-        self.population.loc[
-            will_self_quarantine, 'quarantine_start_date'
-        ] = day
-          
+        self.population.loc[will_quarantine, 'state'] = 'Q'
+        self.population.loc[will_quarantine, 'quarantine_start_date'] = day
+
     def infect_susceptible_cases(self, day):
         """Susceptible --> Infected transition.
         
